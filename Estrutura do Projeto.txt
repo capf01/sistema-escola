@@ -1,0 +1,37 @@
+src/
+├── assets/
+├── components/
+│   ├── auth/
+│   │   └── LoginForm.vue
+│   ├── dashboard/
+│   │   ├── StudentList.vue
+│   │   ├── AttendanceForm.vue
+│   │   └── GradesForm.vue
+│   ├── students/
+│   │   ├── StudentForm.vue
+│   │   └── StudentCard.vue
+│   ├── reports/
+│   │   ├── GradesReport.vue
+│   │   └── AttendanceReport.vue
+│   └── ui/
+│       ├── NavBar.vue
+│       └── SideBar.vue
+├── composables/
+│   ├── useAuth.js
+│   ├── useStudents.js
+│   ├── useAttendance.js
+│   └── useGrades.js
+├── router/
+│   └── index.js
+├── stores/
+│   ├── auth.js
+│   ├── students.js
+│   ├── attendance.js
+│   └── grades.js
+├── views/
+│   ├── AuthView.vue
+│   ├── DashboardView.vue
+│   ├── StudentsView.vue
+│   └── ReportsView.vue
+├── App.vue
+└── main.js
