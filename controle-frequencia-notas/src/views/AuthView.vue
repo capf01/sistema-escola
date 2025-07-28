@@ -1,264 +1,142 @@
-<script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+// src/stores/auth.js
+import { defineStore } from 'pinia'
+import { 
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth'
+import { auth } from '@/firebase' // Agora importamos o auth diretamente
 
-const router = useRouter()
-const authStore = useAuthStore()
-
-const email = ref('admin') // Valor padrão para email
-const password = ref('admin') // Valor padrão para senha
-const rememberMe = ref(false)
-
-const handleLogin = async () => {
-  // Verificação simples para o login admin
-  if (email.value === 'admin' && password.value === 'admin') {
-    // Simula um login bem-sucedido
-    authStore.user = { name: 'Administrador', email: 'admin' }
-    router.push('/')
-  } else {
-    // Se não for admin, chama o método normal de login
-    await authStore.login(email.value, password.value)
+export const useAuthStore = defineStore('auth', {
+  state: () => ({
+    user: null,
+    userData: null, // Para armazenar dados adicionais do Firestore
+    isAuthenticated: false,
+    loading: false,
+    error: null
+  }),
+  getters: {
+    isAdmin: (state) => {
+      return state.userData?.role === 'admin'
+    },
+    isTeacher: (state) => {
+      return state.userData?.role === 'teacher'
+    },
+    userName: (state) => state.user?.displayName || null,
+    userEmail: (state) => state.user?.email || null
+  },
+  actions: {
+    async login({ email, password }) {
+      this.loading = true
+      this.error = null
+      
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password)
+        this.user = userCredential.user
+        this.isAuthenticated = true
+        
+        // Carrega dados adicionais do usuário do Firestore
+        await this.fetchUserData(userCredential.user.uid)
+        
+        return true
+      } catch (error) {
+        this.error = this.translateFirebaseError(error.code)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
     
-    if (authStore.user) {
-      router.push('/')
+    async register({ email, password, name, role = 'student' }) {
+      this.loading = true
+      this.error = null
+      
+      try {
+        // 1. Criar usuário no Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+        
+        // 2. Atualizar o nome do usuário
+        await updateProfile(userCredential.user, { displayName: name })
+        
+        // 3. Adicionar informações adicionais no Firestore
+        await this.addUserToFirestore(userCredential.user.uid, { email, name, role })
+        
+        this.user = userCredential.user
+        this.userData = { email, name, role }
+        this.isAuthenticated = true
+        
+        return true
+      } catch (error) {
+        this.error = this.translateFirebaseError(error.code)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+    
+    async logout() {
+      try {
+        await signOut(auth)
+        this.clearAuth()
+      } catch (error) {
+        this.error = this.translateFirebaseError(error.code)
+        throw error
+      }
+    },
+    
+    clearAuth() {
+      this.user = null
+      this.userData = null
+      this.isAuthenticated = false
+      this.error = null
+    },
+    
+    // Monitorar estado de autenticação
+    initAuthListener() {
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          this.user = user
+          this.isAuthenticated = true
+          await this.fetchUserData(user.uid)
+        } else {
+          this.clearAuth()
+        }
+      })
+    },
+    
+    // Traduzir erros do Firebase
+    translateFirebaseError(code) {
+      const errors = {
+        'auth/invalid-email': 'E-mail inválido',
+        'auth/user-disabled': 'Usuário desativado',
+        'auth/user-not-found': 'Usuário não encontrado',
+        'auth/wrong-password': 'Senha incorreta',
+        'auth/email-already-in-use': 'E-mail já está em uso',
+        'auth/weak-password': 'Senha muito fraca',
+        'auth/too-many-requests': 'Muitas tentativas. Tente novamente mais tarde.'
+      }
+      return errors[code] || 'Ocorreu um erro. Tente novamente.'
+    },
+    
+    // Métodos para Firestore (implementação básica)
+    async addUserToFirestore(uid, userData) {
+      // Implemente a conexão com o Firestore aqui
+      console.log('Adicionando usuário ao Firestore:', uid, userData)
+      // Exemplo:
+      // await setDoc(doc(db, "users", uid), userData)
+    },
+    
+    async fetchUserData(uid) {
+      // Implemente a busca no Firestore aqui
+      console.log('Buscando dados do usuário:', uid)
+      // Exemplo:
+      // const docSnap = await getDoc(doc(db, "users", uid))
+      // if (docSnap.exists()) {
+      //   this.userData = docSnap.data()
+      // }
     }
-  }
-}
-
-const signInWithGoogle = async () => {
-  // Implementar login com Google se necessário
-  console.log('Login com Google')
-}
-</script>
-
-<style scoped>
-.login-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #f9fafb;
-  padding: 3rem 1rem;
-}
-
-.login-content {
-  max-width: 28rem;
-  width: 100%;
-}
-
-.login-header {
-  text-align: center;
-}
-
-.login-title {
-  margin-top: 1.5rem;
-  font-size: 1.875rem;
-  font-weight: 800;
-  color: #111827;
-}
-
-.login-subtitle {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  color: #6b7280;
-}
-
-.login-form-container {
-  margin-top: 2rem;
-  background-color: white;
-  padding: 2rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.error-message {
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  background-color: #fef2f2;
-  color: #b91c1c;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-}
-
-.login-form {
-  margin-top: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-}
-
-.input-container {
-  margin-top: 0.25rem;
-}
-
-.form-input {
-  display: block;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  font-size: 0.875rem;
-  color: #111827;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.form-options {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.5rem;
-}
-
-.remember-me {
-  display: flex;
-  align-items: center;
-}
-
-.remember-checkbox {
-  height: 1rem;
-  width: 1rem;
-  color: #3b82f6;
-  border: 1px solid #d1d5db;
-  border-radius: 0.25rem;
-  margin-right: 0.5rem;
-}
-
-.remember-checkbox:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.remember-label {
-  font-size: 0.875rem;
-  color: #374151;
-}
-
-.forgot-link {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #3b82f6;
-  text-decoration: none;
-}
-
-.forgot-link:hover {
-  color: #2563eb;
-}
-
-.submit-button-container {
-  margin-top: 1.5rem;
-}
-
-.submit-button {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  padding: 0.5rem 1rem;
-  background-color: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s;
-}
-
-.submit-button:hover:not(:disabled) {
-  background-color: #2563eb;
-}
-
-.submit-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.loading-spinner {
-  height: 1.25rem;
-  width: 1.25rem;
-  animation: spin 1s linear infinite;
-}
-
-.spinner-circle {
-  opacity: 0.25;
-}
-
-.spinner-path {
-  opacity: 0.75;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.social-divider {
-  display: flex;
-  align-items: center;
-  margin-top: 1.5rem;
-}
-
-.divider-line {
-  flex: 1;
-  height: 1px;
-  background-color: #d1d5db;
-}
-
-.divider-text {
-  padding: 0 0.5rem;
-  font-size: 0.875rem;
-  color: #6b7280;
-}
-
-.social-buttons {
-  margin-top: 1.5rem;
-}
-
-.google-button {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  padding: 0.5rem 1rem;
-  background-color: white;
-  color: #6b7280;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s;
-}
-
-.google-button:hover {
-  background-color: #f9fafb;
-}
-
-.google-icon {
-  height: 1.25rem;
-  width: 1.25rem;
-  margin-right: 0.5rem;
-}
-
-.google-button-text {
-  margin-left: 0.5rem;
-}
-</style>
+  },
+  persist: true
+})
